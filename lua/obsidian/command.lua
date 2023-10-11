@@ -1,4 +1,5 @@
 local Path = require "plenary.path"
+local Popup = require('plenary.popup')
 local Job = require "plenary.job"
 local Note = require "obsidian.note"
 local echo = require "obsidian.echo"
@@ -418,7 +419,6 @@ end
 ---@param client obsidian.Client
 ---@param _ table
 command.move_current_buffer = function(client, _)
-  local popup = require('plenary.popup')
   local options = {}
 
   local function traverseFilePath(path, currentLayer)
@@ -452,7 +452,7 @@ command.move_current_buffer = function(client, _)
       local borderchars =  { "─", "│", "─", "│", "╭", "╮", "╯", "╰" }
       local bufnr = vim.api.nvim_create_buf(false, false)
 
-      local obsidian_move_cmd_win_id, win = popup.create(bufnr, {
+      local obsidian_move_cmd_win_id, win = Popup.create(bufnr, {
           title = "TEST",
           highlight = "ObsidianWindow",
           line = math.floor(((vim.o.lines - height) / 2) - 1),
@@ -518,30 +518,31 @@ command.move_current_buffer = function(client, _)
     )
   )
 
-end
-
-function Select_menu_item()
-  local full_path = vim.api.nvim_buf_get_name(current_buf)
-  local choice = vim.fn.line(".")
-  local directory_path = "/home/austin/Zettelkasten-v2"
-  local filename = string.match(full_path, "[^/\\]+$")
-  local path_to_place_file = directory_path .. "/" .. options[choice] .. "/" .. filename
-  local success, errorMsg = os.rename(full_path, directory_path .. "/" .. options[choice] .. "/" .. filename)
-  Close_menu()
-  if success then
-    print("File moved successfully to " .. options[choice] .. ", reloading file in new buffer.")
-    vim.api.nvim_command("e " .. path_to_place_file)
-  else
-    print("Error moving file: " .. errorMsg)
+  function Select_menu_item()
+    local full_path = vim.api.nvim_buf_get_name(current_buf)
+    local choice = vim.fn.line(".")
+    local directory_path = "/home/austin/Zettelkasten-v2"
+    local filename = string.match(full_path, "[^/\\]+$")
+    local path_to_place_file = directory_path .. "/" .. options[choice] .. "/" .. filename
+    local success, errorMsg = os.rename(full_path, directory_path .. "/" .. options[choice] .. "/" .. filename)
+    Close_menu()
+    if success then
+      print("File moved successfully to " .. options[choice] .. ", reloading file in new buffer.")
+      vim.api.nvim_command("e " .. path_to_place_file)
+    else
+      print("Error moving file: " .. errorMsg)
+    end
   end
+
+  function Close_menu()
+    vim.api.nvim_win_close(Move_file_win_id, true)
+
+    Move_file_bufnr = nil
+    Move_file_win_id = nil
+  end
+
 end
 
-function Close_menu()
-  vim.api.nvim_win_close(Move_file_win_id, true)
-
-  Move_file_bufnr = nil
-  Move_file_win_id = nil
-end
 
 
 command.link_new = function(client, data)
