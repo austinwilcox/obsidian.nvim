@@ -413,6 +413,137 @@ command.quick_switch = function(client, _)
   })
 end
 
+---Move current md file around in obsidian vault
+---
+---@param client obsidian.Client
+---@param _ table
+command.move_current_buffer = function(client, _)
+  local popup = require('plenary.popup')
+  local options = {}
+
+  local function traverseFilePath(path, currentLayer)
+    print(path)
+    local files = vim.fn.readdir(path)
+    local _, final = string.find(path, tostring(client.dir), 1, true)
+    local parent_path = nil
+    if final ~= nil and path ~= client.dir then
+      parent_path = string.sub(path, final+2)
+    end
+    for _, file in ipairs(files) do
+      if vim.fn.isdirectory(path .. "/" .. file) == 1 then
+        if file:sub(1, 1) ~= "." then
+          if parent_path ~= nil then
+            table.insert(options, parent_path .. "/" .. file)
+          else
+            table.insert(options, file)
+          end
+
+          -- if M.layers == -1 or currentLayer < M.layers then
+          --   traverseFilePath(path .. "/" .. file, currentLayer + 1)
+          -- end
+        end
+      end
+    end
+  end
+
+  local function create_window()
+      local width =  60
+      local height = 10
+      local borderchars =  { "─", "│", "─", "│", "╭", "╮", "╯", "╰" }
+      local bufnr = vim.api.nvim_create_buf(false, false)
+
+      local obsidian_move_cmd_win_id, win = popup.create(bufnr, {
+          title = "TEST",
+          highlight = "ObsidianWindow",
+          line = math.floor(((vim.o.lines - height) / 2) - 1),
+          col = math.floor((vim.o.columns - width) / 2),
+          minwidth = width,
+          minheight = height,
+          borderchars = borderchars,
+      })
+
+      vim.api.nvim_win_set_option(
+          win.border.win_id,
+          "winhl",
+          "Normal:ObsidianBorder"
+      )
+
+      return {
+          bufnr = bufnr,
+          win_id = obsidian_move_cmd_win_id,
+      }
+  end
+
+  current_buf = vim.api.nvim_get_current_buf()
+
+  traverseFilePath(tostring(client.dir), 0)
+
+  local win_info = create_window()
+  Move_file_bufnr = win_info.bufnr
+  Move_file_win_id = win_info.win_id
+
+  vim.api.nvim_win_set_option(Move_file_win_id, "number", true)
+  vim.api.nvim_buf_set_name(Move_file_bufnr, "obsidian-move-file-menu")
+  vim.api.nvim_buf_set_lines(Move_file_bufnr, 0, #options, false, options)
+  vim.api.nvim_buf_set_option(Move_file_bufnr, "filetype", "obsidian-move-file")
+  vim.api.nvim_buf_set_option(Move_file_bufnr, "buftype", "acwrite")
+  vim.api.nvim_buf_set_option(Move_file_bufnr, "bufhidden", "delete")
+
+
+  vim.api.nvim_buf_set_keymap(
+    Move_file_bufnr,
+    "n",
+    "q",
+    "<Cmd>lua Close_menu()<CR>",
+    { silent = true }
+  )
+  vim.api.nvim_buf_set_keymap(
+    Move_file_bufnr,
+    "n",
+    "<ESC>",
+    "<Cmd>lua Close_menu()<CR>",
+    { silent = true }
+  )
+  vim.api.nvim_buf_set_keymap(
+    Move_file_bufnr,
+    "n",
+    "<CR>",
+    "<Cmd>lua Select_menu_item()<CR>",
+    {}
+  )
+  vim.cmd(
+    string.format(
+      "autocmd BufModifiedSet <buffer=%s> set nomodified",
+      Move_file_bufnr
+    )
+  )
+
+end
+
+function Select_menu_item()
+  local full_path = vim.api.nvim_buf_get_name(current_buf)
+  local choice = vim.fn.line(".")
+  local directory_path = "/home/austin/Zettelkasten-v2"
+  local filename = string.match(full_path, "[^/\\]+$")
+  local path_to_place_file = directory_path .. "/" .. options[choice] .. "/" .. filename
+  local success, errorMsg = os.rename(full_path, directory_path .. "/" .. options[choice] .. "/" .. filename)
+  Close_menu()
+  if success then
+    print("File moved successfully to " .. options[choice] .. ", reloading file in new buffer.")
+    vim.api.nvim_command("e " .. path_to_place_file)
+  else
+    print("Error moving file: " .. errorMsg)
+  end
+end
+
+function Close_menu()
+  vim.api.nvim_win_close(Move_file_win_id, true)
+
+  Move_file_bufnr = nil
+  Move_file_win_id = nil
+end
+
+
 command.link_new = function(client, data)
   local _, csrow, cscol, _ = unpack(vim.fn.getpos "'<")
   local _, cerow, cecol, _ = unpack(vim.fn.getpos "'>")
@@ -665,6 +796,7 @@ local commands = {
   ObsidianLinkNew = { func = command.link_new, opts = { nargs = "?", range = true } },
   ObsidianFollowLink = { func = command.follow, opts = { nargs = 0 } },
   ObsidianCheckHealth = { func = command.check_health, opts = { nargs = 0 } },
+  ObsidianMoveCurrentBuffer = { func = command.move_current_buffer, opts = { nargs = 0 } },
 }
 
 ---Register all commands.
@@ -685,5 +817,12 @@ command.register_all = function(client)
     vim.api.nvim_create_user_command(command_name, func, command_config.opts)
   end
 end
+
+--TESTING
+local obsidian = require "obsidian"
+command.move_current_buffer(obsidian.new({
+  dir = "/home/austin/Zettelkasten-v2",
+}), {})
+--END TESTING
 
 return command
